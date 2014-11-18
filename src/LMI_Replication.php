@@ -150,6 +150,8 @@ foreach($iterator as $file)
 	shuffle($confFiles);
 }
 
+#roster replication
+
 foreach($confFiles as $file)
 {
 	try
