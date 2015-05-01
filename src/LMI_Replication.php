@@ -14,17 +14,9 @@ $confDir = $path . "../conf/";
 $confSuffix = ".conf";
 $confFile = $confDir . "rep.conf";
 
-$LOCKFILE_NAME = $confDir . "lockfile";
-
-//check for lockfiles in the localdir, only once.
-if(file_exists($LOCKFILE_NAME))
+if( system("ps -ef |grep LMI_Replication.php | grep -v grep") )
 {
-	echo "Aborting...lockfile found.", PHP_EOL;
-	exit(1);
-}
-else if( !file_put_contents($LOCKFILE_NAME, getmypid(), LOCK_EX) )
-{
-	echo "Aborting...could not create lockfile.", PHP_EOL;
+	echo "Aborting...replication running.", PHP_EOL;
 	exit(1);
 }
 
@@ -328,6 +320,4 @@ echo "Total Replication time (msec): ", $finalStats['repTime'], PHP_EOL;
 echo "Total Replication time (min): ", $finalStats['repTime']/60000, PHP_EOL;
 echo "Total Elapsed time (min): ", $elapsedTime/60000, PHP_EOL;
 
-//remove lockfiles
-unlink($LOCKFILE_NAME);
 ?>
