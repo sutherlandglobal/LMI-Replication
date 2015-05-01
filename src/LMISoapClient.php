@@ -1,18 +1,23 @@
 <?php
-class LMI_SOAP_Connection
+class LMISoapClient
 {
 	private $authCode;
 	private $soapClient;
+	
 	const LOGIN_OK = "login_OK";
 	const REQUEST_AUTH_CODE_OK = "requestAuthCode_OK";
 	const RUN_REPORT_OK = "getReport_OK";
+	const LOGOUT_OK = "logout_OK";
+	const GET_GROUP_OK = "getGroup_OK";
+	const GET_HIERARCHY_OK = "OK";	
+	
 	private $loggedIn;
-	private $reportData;
 
 	public function __construct( $url, $user, $pass )
 	{
+		//build the php soap client and try a login, thow if failure
+		
 		$this->loggedIn = false;
-		//$soapClient = new SoapClient("https://secure.logmeinrescue.com/api/api.asmx?wsdl");
 
 		$this->soapClient = new SoapClient($url);
 
@@ -25,7 +30,7 @@ class LMI_SOAP_Connection
 		
 		$login = $this->soapClient->login($loginParams);
 
-		if($login->loginResult == LMI_SOAP_CONNECTION::LOGIN_OK)
+		if($login->loginResult == LMISoapClient::LOGIN_OK)
 		{
 			$this->authCode = $this->generateAuthCode($this->soapClient->requestAuthCode($loginParams));
 
@@ -44,7 +49,7 @@ class LMI_SOAP_Connection
 
 	private function generateAuthCode($request)
 	{
-		if($request->requestAuthCodeResult != LMI_SOAP_CONNECTION::REQUEST_AUTH_CODE_OK )
+		if($request->requestAuthCodeResult != LMISoapClient::REQUEST_AUTH_CODE_OK )
 		{
 			throw new Exception("Failed to request LMI Auth Code");
 		}
@@ -57,13 +62,49 @@ class LMI_SOAP_Connection
 		return $this->authCode;
 	}
 	
+	public function getHierarchy()
+	{
+		$hierparams = array
+		(
+				"sAuthCode" => $this->getAuthCode()		
+		);
+		
+		$hierarchyResult = $this->soapClient->getHierarchy($hierparams);
+		
+		//make sure we got a good result, exception otherwise
+		
+		//return the raw data, handle the lmi context here
+		return $hierarchyResult->aHierarchy->HIERARCHY;
+	}
+	
+	public function getGroup($nodeID)
+	{
+		$teamName = "";
+		
+		//soap call to resolve teamname
+		$teamParams = array
+		(
+				"iNodeID" => $nodeID,
+				"sAuthCode" => $this->authCode
+		);
+			
+		$groupQueryResult = $this->soapClient->getGroup($teamParams);
+
+		if( $groupQueryResult->getGroupResult == LMISoapClient::GET_GROUP_OK)
+		{
+			//var_dump($groupQueryResult);
+			$teamName = $groupQueryResult->oGroup->sName;
+		}
+		
+		return $teamName;
+	}
+	
 	public function runReport($reportAreaParams,$reportDateParams, $getReportParams, $reportDelimiter)
 	{
-		$this->reportData = "";
+		$reportData = "";
 		
 		$delimiterParams = array
 		(
-			//'sDelimiter' => '","',
 			'sDelimiter' => $reportDelimiter,
 		);
 		
@@ -90,24 +131,17 @@ class LMI_SOAP_Connection
 		$delimiterParams['sAuthCode'] = $this->authCode;
 		
 		$setReportTimeZoneResponse= $this->soapClient->setTimeZone($timeZoneParams);
-		
 		$setReportAreaResponse = $this->soapClient->setReportArea($reportAreaParams);
-		//$setReportTimeResponse = $this->soapClient->setReportTime($reportTimeParams);
-		
-		//$setReportDateResponse = $this->soapClient->setReportDate($reportDateParams);
 		$setReportDateResponse = $this->soapClient->setReportDate_v2($reportDateParams);
-		
-		//var_dump( $this->soapClient->getReportDate_v2());
-		
 		$setReportDelimiterResponse = $this->soapClient->setDelimiter($delimiterParams);
 		
 		$getReportResponse = $this->soapClient->getReport($getReportParams);
 		
-		if($getReportResponse->getReportResult != LMI_SOAP_Connection::RUN_REPORT_OK)
+		if($getReportResponse->getReportResult != LMISoapClient::RUN_REPORT_OK)
 		{
-			throw new Exception ("Bad response running report: $getReportResponse->getReportResult");
+			var_dump($getReportResponse);
+			throw new Exception ("Bad response running report: {$getReportResponse->getReportResult}" );
 		}
-		
 		
 		if (is_soap_fault($getReportResponse)) 
 		{
@@ -116,24 +150,21 @@ class LMI_SOAP_Connection
 		}
 		else
 		{
-			$this->reportData = preg_replace('/\"/', '","',  preg_replace('/\,/', '', $getReportResponse->sReport));
+			$reportData = preg_replace('/\"/', '","',  preg_replace('/\,/', '', $getReportResponse->sReport));
 		}
 		
-		//quotes are returned as #quot; so we can seperate on that and remove commas, then give it a csv-like seperator
-		//$this->reportData = preg_replace('/\,/', '', $this->reportData);
-		
-		return  $this->reportData;
+		return  $reportData;
 	}
-
-	function __destruct()
-	{		
+	
+	public function close()
+	{
 		if($this->loggedIn)
 		{
 			echo "logging out\n";
 			$logoutResult = $this->soapClient->logout();
-
+		
 			//var_dump($logoutResult);
-			if($logoutResult->logoutResult == "logout_OK")
+			if($logoutResult->logoutResult == LMISoapClient::LOGOUT_OK)
 			{
 				echo "logout good\n";
 			}
@@ -141,6 +172,8 @@ class LMI_SOAP_Connection
 			{
 				echo "logout bad\n";
 			}
+			
+			$this->loggedIn = false;
 		}
 		else
 		{
@@ -149,7 +182,10 @@ class LMI_SOAP_Connection
 		
 		unset($this->soapClient);
 		$this->soapClient = null;
-		
+	}
+
+	function __destruct()
+	{		
 		echo "Destructing soap client, memory usage: ", memory_get_usage(true)/1000,"kb", PHP_EOL;
 	}
 }
