@@ -5,11 +5,6 @@ include 'ReplicationSite.php';
 include 'RosterReplicator.php';
 include 'LMIReport.php';
 
-function loadSite()
-{
-	
-}
-
 ini_set('memory_limit', '512M');
 
 $path = dirname(__FILE__) . "/";
@@ -17,39 +12,14 @@ $confDir = $path . "../conf/";
 $confSuffix = ".conf";
 $confFile = "rep.conf";
 
-$LOCKFILE_NAME = $confDir . "lockfile";
 
-//check for lockfiles in the localdir, only once.
-if(file_exists($LOCKFILE_NAME))
+//check to see if replication proc is already running
+if(system("ps -ef | grep " . __FILE__ ." | grep php |  grep -v grep | wc -l") > 2 )
 {
-	//172800000 ms in two days
-	if(microTime(true) - filemtime($LOCKFILE_NAME) < 172800000 )
-	{	
-		echo "Aborting...lockfile found.", PHP_EOL;
-		exit(1);
-	}
-	else
-	{
-		//check to see if replication proc is still running, if not delete the lockfile
-		if(shell_exec("ps -ef | grep " . __FILE__ ." | grep -v grep") == null)
-		{
-			echo "Deleting old lockfile", PHP_EOL;
-			unlink($LOCKFILE_NAME);
-		}
-		else
-		{
-			echo "Aborting...replication process already running.", PHP_EOL;
-			exit(1);
-		}
-	}
-}
-
-if( !file_put_contents($LOCKFILE_NAME, getmypid(), LOCK_EX) )
-{
-	echo "Aborting...could not create lockfile.", PHP_EOL;
+	echo "Aborting...replication process already running.", PHP_EOL;
 	exit(1);
 }
-
+	
 //bad guess is lmi can take ~1.25 logins per minute.
 // $REPORT_SLEEP_MIN = 1;
 // $REPORT_SLEEP_MAX = 2;
@@ -383,6 +353,4 @@ echo "Total Replication time (msec): ", $finalStats['repTime'], PHP_EOL;
 echo "Total Replication time (min): ", $finalStats['repTime']/60000, PHP_EOL;
 echo "Total Elapsed time (min): ", $elapsedTime/60000, PHP_EOL;
 
-//remove lockfiles
-unlink($LOCKFILE_NAME);
 ?>
